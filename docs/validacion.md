@@ -62,7 +62,7 @@ La guía consta de 21 páginas y se genera desde `docs/guia.md`. Incluye dos dia
 
 ## Integración continua
 
-El [workflow público](https://github.com/eliaquin/dotnet-development-guide/actions/workflows/ci.yml) repite restauración bloqueada, formato, compilación, pruebas y auditoría en Ubuntu y Windows. La ejecución de la edición se enlaza después de publicar el código.
+El [workflow público](https://github.com/eliaquin/dotnet-development-guide/actions/workflows/ci.yml) repite restauración bloqueada, formato, compilación, pruebas y auditoría en Ubuntu y Windows. La [ejecución 42222043139](https://github.com/eliaquin/dotnet-development-guide/actions/runs/42222043139) valida el commit `9cb15609aaea38df9aa83b6cc70d7c10c318be68`. Sus logs conservan los resultados de cada plataforma.
 
 ## Alcance
 
