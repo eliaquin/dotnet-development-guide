@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../Store.Application/Store.Application.csproj" />
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Microsoft.Data.Sqlite" />
+    <EmbeddedResource Include="Migrations/*.sql" />
+  </ItemGroup>
+</Project>
