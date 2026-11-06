@@ -11,3 +11,7 @@
 artifacts/
 work/
 .env
+**/__pycache__/
+*.pem
+*.key
+*.pfx

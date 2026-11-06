@@ -19,7 +19,7 @@ public sealed class CatalogApiTests
     public async Task NewDatabaseIsReadyAndHasNoCategories()
     {
         await using var factory = new StoreApiFactory();
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
 
         using var health = await client.GetAsync("/health", Cancellation);
         health.EnsureSuccessStatusCode();
@@ -33,9 +33,9 @@ public sealed class CatalogApiTests
     public async Task CreatedCategoryHasLocationAndPersistsAcrossClients()
     {
         await using var factory = new StoreApiFactory();
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var category = await CreateCategory(client, "  Audio  ");
-        using var otherClient = factory.CreateClient();
+        using var otherClient = await factory.CreateAuthenticatedClientAsync();
 
         var stored = await otherClient.GetFromJsonAsync<CategoryResponse>($"/api/categories/{category.Id}", Cancellation);
 
@@ -48,7 +48,7 @@ public sealed class CatalogApiTests
     public async Task DuplicateCategoryReturnsConflictWithoutInsertingAnotherRow()
     {
         await using var factory = new StoreApiFactory();
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         _ = await CreateCategory(client, "Audio");
 
         using var response = await client.PostAsJsonAsync("/api/categories", new { name = "audio" }, Cancellation);
@@ -66,7 +66,7 @@ public sealed class CatalogApiTests
     public async Task InvalidCategoryNameReturnsBadRequest(string? name)
     {
         await using var factory = new StoreApiFactory();
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
 
         using var response = await client.PostAsJsonAsync("/api/categories", new { name }, Cancellation);
 
@@ -77,7 +77,7 @@ public sealed class CatalogApiTests
     public async Task CategoryNameAtMaximumLengthIsAccepted()
     {
         await using var factory = new StoreApiFactory();
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
 
         var category = await CreateCategory(client, new string('a', 50));
 
@@ -88,7 +88,7 @@ public sealed class CatalogApiTests
     public async Task MissingCategoryReturnsNotFound()
     {
         await using var factory = new StoreApiFactory();
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
 
         using var response = await client.GetAsync("/api/categories/99999", Cancellation);
 
@@ -99,7 +99,7 @@ public sealed class CatalogApiTests
     public async Task GadgetCanBeCreatedReadUpdatedAndDeleted()
     {
         await using var factory = new StoreApiFactory();
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var category = await CreateCategory(client);
         var gadget = await CreateGadget(client, category.Id);
         var read = await client.GetFromJsonAsync<GadgetResponse>($"/api/gadgets/{gadget.Id}", Cancellation);
@@ -125,7 +125,7 @@ public sealed class CatalogApiTests
     public async Task UnknownCategoryPreventsGadgetCreation()
     {
         await using var factory = new StoreApiFactory();
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
 
         using var response = await client.PostAsJsonAsync("/api/gadgets",
             new { name = "Headphones", description = "", price = 20m, categoryId = 99999 }, Cancellation);
@@ -142,7 +142,7 @@ public sealed class CatalogApiTests
     public async Task InvalidPriceReturnsBadRequest(string price)
     {
         await using var factory = new StoreApiFactory();
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var category = await CreateCategory(client);
         using var content = new StringContent(
             $$"""{"name":"Invalid price","description":"","price":{{price}},"categoryId":{{category.Id}}}""", Encoding.UTF8, "application/json");
@@ -158,7 +158,7 @@ public sealed class CatalogApiTests
     public async Task PriceBoundariesRoundTripExactly(string price)
     {
         await using var factory = new StoreApiFactory();
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var category = await CreateCategory(client);
         var expected = decimal.Parse(price, System.Globalization.CultureInfo.InvariantCulture);
 
@@ -172,7 +172,7 @@ public sealed class CatalogApiTests
     public async Task LongDescriptionReturnsBadRequest()
     {
         await using var factory = new StoreApiFactory();
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var category = await CreateCategory(client);
 
         using var response = await client.PostAsJsonAsync("/api/gadgets",
@@ -185,7 +185,7 @@ public sealed class CatalogApiTests
     public async Task StaleUpdateReturnsConflictAndPreservesLatestValue()
     {
         await using var factory = new StoreApiFactory();
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var category = await CreateCategory(client);
         var gadget = await CreateGadget(client, category.Id);
         using var first = await client.PutAsJsonAsync($"/api/gadgets/{gadget.Id}",
@@ -205,7 +205,7 @@ public sealed class CatalogApiTests
     public async Task StaleDeleteReturnsConflictAndKeepsGadget()
     {
         await using var factory = new StoreApiFactory();
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var category = await CreateCategory(client);
         var gadget = await CreateGadget(client, category.Id);
         using var update = await client.PutAsJsonAsync($"/api/gadgets/{gadget.Id}",
@@ -223,7 +223,7 @@ public sealed class CatalogApiTests
     public async Task ConcurrentUpdatesWithSameVersionAllowExactlyOneWriter()
     {
         await using var factory = new StoreApiFactory();
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var category = await CreateCategory(client);
         var gadget = await CreateGadget(client, category.Id);
 
@@ -252,7 +252,7 @@ public sealed class CatalogApiTests
     public async Task UpdatingMissingGadgetReturnsNotFound()
     {
         await using var factory = new StoreApiFactory();
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var category = await CreateCategory(client);
 
         using var response = await client.PutAsJsonAsync("/api/gadgets/99999",
@@ -265,7 +265,7 @@ public sealed class CatalogApiTests
     public async Task DeletingMissingGadgetReturnsNotFound()
     {
         await using var factory = new StoreApiFactory();
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
 
         using var response = await client.DeleteAsync("/api/gadgets/99999?version=1", Cancellation);
 
@@ -276,7 +276,7 @@ public sealed class CatalogApiTests
     public async Task CategoryFilterAndPaginationReturnOnlyRequestedRows()
     {
         await using var factory = new StoreApiFactory();
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var firstCategory = await CreateCategory(client, "Audio");
         var secondCategory = await CreateCategory(client, "Video");
         _ = await CreateGadget(client, firstCategory.Id, "First");
@@ -299,7 +299,7 @@ public sealed class CatalogApiTests
     public async Task InvalidQueryValuesReturnBadRequest(string path)
     {
         await using var factory = new StoreApiFactory();
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         using var response = path.Contains("version=", StringComparison.Ordinal)
             ? await client.DeleteAsync(path, Cancellation)
             : await client.GetAsync(path, Cancellation);
@@ -311,7 +311,7 @@ public sealed class CatalogApiTests
     public async Task MalformedJsonReturnsBadRequest()
     {
         await using var factory = new StoreApiFactory();
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         using var content = new StringContent("{\"name\":", Encoding.UTF8, "application/json");
 
         using var response = await client.PostAsync("/api/categories", content, Cancellation);
@@ -328,7 +328,7 @@ public sealed class CatalogApiTests
     public async Task MissingRequiredNumericFieldsReturnBadRequest(string method, string json)
     {
         await using var factory = new StoreApiFactory();
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         using var request = new HttpRequestMessage(new HttpMethod(method),
             method == "POST" ? "/api/gadgets" : "/api/gadgets/1")
         {
@@ -344,7 +344,7 @@ public sealed class CatalogApiTests
     public async Task MaximumCategoryNameWithSurroundingSpacesIsNormalizedBeforeValidation()
     {
         await using var factory = new StoreApiFactory();
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var name = new string('c', 50);
 
         var category = await CreateCategory(client, $"  {name}  ");
@@ -356,7 +356,7 @@ public sealed class CatalogApiTests
     public async Task MaximumGadgetStringsWithSurroundingSpacesAreNormalizedOnCreateAndUpdate()
     {
         await using var factory = new StoreApiFactory();
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var category = await CreateCategory(client);
         var name = new string('g', 50);
         var description = new string('d', 500);
@@ -379,7 +379,7 @@ public sealed class CatalogApiTests
     public async Task UnexpectedDatabaseFailureReturnsSafeProblemAndLogsException()
     {
         await using var factory = new StoreApiFactory();
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         using (var connection = new SqliteConnectionFactory(factory.DatabasePath).OpenConnection())
         using (var command = connection.CreateCommand())
         {
@@ -403,7 +403,7 @@ public sealed class CatalogApiTests
     public async Task SqlLookingTextIsStoredAsLiteralData()
     {
         await using var factory = new StoreApiFactory();
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         const string suspicious = "Audio'); DROP TABLE Categories;--";
 
         var category = await CreateCategory(client, suspicious);
@@ -418,7 +418,7 @@ public sealed class CatalogApiTests
     public async Task ReinitializingSchemaKeepsExistingData()
     {
         await using var factory = new StoreApiFactory();
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var category = await CreateCategory(client);
 
         var connections = new SqliteConnectionFactory(factory.DatabasePath);
@@ -434,13 +434,13 @@ public sealed class CatalogApiTests
     public async Task InitializerRejectsNewerSchemaWithoutChangingDataOrVersion()
     {
         await using var factory = new StoreApiFactory();
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var category = await CreateCategory(client);
         var connections = new SqliteConnectionFactory(factory.DatabasePath);
         using (var connection = connections.OpenConnection())
         using (var command = connection.CreateCommand())
         {
-            command.CommandText = "PRAGMA user_version = 2;";
+            command.CommandText = "PRAGMA user_version = 3;";
             _ = command.ExecuteNonQuery();
         }
 
@@ -451,7 +451,7 @@ public sealed class CatalogApiTests
         using (var command = connection.CreateCommand())
         {
             command.CommandText = "PRAGMA user_version;";
-            Assert.Equal(2L, Assert.IsType<long>(command.ExecuteScalar()));
+            Assert.Equal(3L, Assert.IsType<long>(command.ExecuteScalar()));
         }
 
         var stored = await client.GetFromJsonAsync<CategoryResponse>($"/api/categories/{category.Id}", Cancellation);
@@ -462,7 +462,7 @@ public sealed class CatalogApiTests
     public async Task DevelopmentExposesValidOpenApiDocument()
     {
         await using var factory = new StoreApiFactory();
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
 
         using var response = await client.GetAsync("/openapi/v1.json", Cancellation);
         response.EnsureSuccessStatusCode();

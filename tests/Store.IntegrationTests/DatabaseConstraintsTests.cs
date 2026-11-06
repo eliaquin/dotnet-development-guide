@@ -17,7 +17,7 @@ public sealed class DatabaseConstraintsTests
     public async Task SchemaRejectsInvalidDirectWritesWithoutInsertingRows(string invalidField, int expectedError)
     {
         await using var factory = new StoreApiFactory();
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         using var response = await client.PostAsJsonAsync("/api/categories", new { name = "Audio" },
             TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);

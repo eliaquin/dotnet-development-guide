@@ -1,95 +1,131 @@
-# Guía de desarrollo con .NET 10
+# Desarrollo de aplicaciones con .NET 10
 
 [![Build and test](https://github.com/eliaquin/dotnet-development-guide/actions/workflows/ci.yml/badge.svg)](https://github.com/eliaquin/dotnet-development-guide/actions/workflows/ci.yml)
 
-Un catálogo local de categorías y productos que muestra separación de responsabilidades, SQL parametrizado con Dapper, reglas de dominio y pruebas automatizadas. La presentación es una API HTTP con controladores; no incluye interfaz gráfica ni autenticación.
+Una API de categorías y productos con arquitectura por capas, Dapper, SQLite y ASP.NET Core Identity. Incluye autenticación por cookies seguras, autorización por roles, protección CSRF y pruebas unitarias e integración.
 
-Consulta la [guía de implementación en PDF](docs/guia.pdf) y las [decisiones técnicas](docs/decisiones.md).
+Consulta la [guía práctica en PDF](docs/guia.pdf), los [diagramas](docs/assets/architecture.png), las [decisiones técnicas](docs/decisiones.md) y la [evidencia de validación](docs/validacion.md).
 
 ## Requisitos
 
-- [SDK .NET 10.0.403](https://dotnet.microsoft.com/download/dotnet/10.0), que incluye el runtime 10.0.14, o un parche compatible de la misma banda de SDK. `global.json` fija esta base y admite sus parches posteriores.
-- Git. No se necesita instalar SQLite ni iniciar un servidor de base de datos.
+- [SDK .NET 10.0.403](https://dotnet.microsoft.com/en-us/download/dotnet/10.0), con runtime 10.0.14, o un parche compatible de la misma banda de SDK.
+- Git.
+- Python 3 para el cliente de demostración y, opcionalmente, para generar la guía.
 
-Esta edición se verificó el 6 de noviembre de 2026. .NET 10 es la versión LTS utilizada; conserva las actualizaciones de seguridad y revisa sus dependencias antes de actualizar los archivos de bloqueo.
+SQLite se distribuye con el proveedor NuGet. El proyecto se ejecuta en una carpeta local con permisos de escritura; no necesita un servidor de base de datos.
 
-## Ejecutar desde cero
-
-Desde una terminal con `dotnet` en el `PATH`:
+## Compilar y probar
 
 ```sh
 git clone https://github.com/eliaquin/dotnet-development-guide.git
 cd dotnet-development-guide
-dotnet --version
 dotnet restore --locked-mode
 dotnet build Store.slnx --configuration Release --no-restore
 dotnet test --solution Store.slnx --configuration Release --no-build
-dotnet run --project src/Store.Api --configuration Release --no-build -- --urls http://127.0.0.1:5080 --environment Development
+dotnet dev-certs https --trust
 ```
 
-El último comando mantiene la API activa. `--` separa las opciones de `dotnet run` de los argumentos de la aplicación. El entorno `Development` habilita el documento OpenAPI en [localhost:5080/openapi/v1.json](http://127.0.0.1:5080/openapi/v1.json).
+`global.json` selecciona el SDK y Microsoft.Testing.Platform. `Directory.Packages.props` fija las dependencias directas y cada proyecto incluye su archivo de bloqueo.
 
-La base se crea sin datos iniciales en `src/Store.Api/App_Data/store.db`. `Database:Path` permite configurar otra ruta; las rutas relativas se resuelven desde el directorio de contenido de la API. La creación del esquema es automática y transaccional. Detén la API con `Ctrl+C`.
+## Crear el administrador inicial
 
-## Probar la API
+El aprovisionamiento solo se ejecuta sobre una base sin usuarios y termina sin iniciar el servidor. Introduce una contraseña de 15 a 128 caracteres; no existe una contraseña predeterminada.
 
-En otra terminal con Bash o una shell compatible:
+En Bash:
 
-```sh
-curl --fail-with-body http://127.0.0.1:5080/health
-
-curl --fail-with-body -X POST http://127.0.0.1:5080/api/categories \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"Accesorios"}'
-
-curl --fail-with-body -X POST http://127.0.0.1:5080/api/gadgets \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"Teclado","description":"Teclado USB","price":1250.50,"categoryId":1}'
-
-curl --fail-with-body 'http://127.0.0.1:5080/api/gadgets?offset=0&limit=50'
+```bash
+export Bootstrap__UserName=admin
+read -r -s -p 'Contraseña inicial: ' Bootstrap__Password
+export Bootstrap__Password
+dotnet run --project src/Store.Api --configuration Release --no-build -- --Bootstrap:Enabled=true --environment Development
+unset Bootstrap__Password Bootstrap__UserName
 ```
 
-`categoryId: 1` supone una base nueva. Usa el `id` devuelto al crear la categoría si ya contiene datos. Repetir el mismo nombre de categoría produce `409 Conflict`.
-
-Los precios del ejemplo se expresan en pesos dominicanos (DOP), con hasta dos decimales, entre 0 y 1,000,000. Se almacenan como centavos enteros para conservar exactitud. No hay conversión de monedas.
-
-En PowerShell, los comandos `dotnet` anteriores son iguales. Para probar la API sin depender de las reglas de comillas de `curl`:
+En PowerShell:
 
 ```powershell
-$base = 'http://127.0.0.1:5080'
-Invoke-RestMethod "$base/health"
-$category = Invoke-RestMethod "$base/api/categories" -Method Post -ContentType 'application/json' -Body (@{name='Perifericos'} | ConvertTo-Json)
-$gadget = @{name='Raton'; description='Raton USB'; price=450.50; categoryId=$category.id}
-Invoke-RestMethod "$base/api/gadgets" -Method Post -ContentType 'application/json' -Body ($gadget | ConvertTo-Json)
-Invoke-RestMethod "$base/api/gadgets?offset=0&limit=50"
+$env:Bootstrap__UserName = 'admin'
+$secret = Read-Host 'Contraseña inicial' -AsSecureString
+$env:Bootstrap__Password = [Net.NetworkCredential]::new('', $secret).Password
+dotnet run --project src/Store.Api --configuration Release --no-build -- --Bootstrap:Enabled=true --environment Development
+Remove-Item Env:Bootstrap__Password, Env:Bootstrap__UserName
 ```
 
-## Estructura y comportamiento
+La contraseña se recibe desde el entorno y no aparece en los argumentos del proceso. Elimina las variables al finalizar el comando.
+
+## Iniciar y recorrer la API
+
+```sh
+dotnet run --project src/Store.Api --configuration Release --no-build -- --urls https://localhost:7080 --environment Development
+```
+
+El comando mantiene la API activa. `--` separa las opciones de `dotnet run` de las opciones de la aplicación. La base está en `src/Store.Api/App_Data/store.db`; `Database:Path` permite elegir otra ruta. Las claves de Data Protection se guardan en `keys`, junto a la base. Detén el servidor con `Ctrl+C`.
+
+En otra terminal, exporta el certificado de desarrollo para que el cliente Python pueda validar HTTPS aunque su almacén de confianza sea distinto del del sistema:
+
+```sh
+mkdir -p work
+dotnet dev-certs https --export-path work/localhost.pem --format PEM --no-password
+python3 scripts/demo.py --base-url https://localhost:7080 --user admin --ca-certificate work/localhost.pem
+```
+
+En PowerShell usa `New-Item -ItemType Directory -Force work` para crear la carpeta; los comandos `dotnet` y `python3` son equivalentes. El cliente solicita la contraseña, inicia sesión y demuestra operaciones del catálogo. Añade `--create-user lector --role Reader` para crear una cuenta con la sesión administradora. Usa `--user lector --read-only` para consultar con permisos de lectura. Gestiona cookies y tokens CSRF sin poner la contraseña en la línea de comandos. El directorio `work` está excluido de Git; los archivos de certificado y su clave privada son material local de desarrollo.
+
+Comprobaciones sin sesión:
+
+```sh
+curl -f https://localhost:7080/health
+curl -i https://localhost:7080/api/categories
+curl -f https://localhost:7080/openapi/v1.json
+```
+
+Los resultados esperados son 200 para health, 401 para el catálogo sin sesión y 200 para OpenAPI en Development.
+
+## Identidad y permisos
+
+| Rol | Permisos |
+|---|---|
+| `Reader` | Consultar categorías y productos; gestionar su propia sesión. |
+| `Editor` | Permisos de lectura y escrituras del catálogo. |
+| `Admin` | Permisos de edición y creación de usuarios con roles permitidos. |
+
+No hay registro público. Un administrador crea cuentas con `POST /api/users` y los campos `userName`, `password` y `role`. El perfil devuelto no expone hashes ni marcas internas.
+
+| Endpoint | Acceso y función |
+|---|---|
+| `GET /api/auth/csrf` | Anónimo; obtiene token y cookie antiforgery. |
+| `POST /api/auth/login` | Anónimo con CSRF; valida `userName` y `password`. |
+| `GET /api/auth/me` | Autenticado; devuelve el perfil. |
+| `POST /api/auth/logout` | Autenticado con CSRF; cierra todas las sesiones propias. |
+| `POST /api/auth/change-password` | Autenticado con CSRF; recibe `currentPassword` y `newPassword`, devuelve 204 y cierra sesiones. |
+| `POST /api/users` | Admin con CSRF; crea una cuenta con su rol. |
+
+Las escrituras de controladores, incluido el login, exigen `X-CSRF-TOKEN` y la cookie antiforgery. Después del login hay que obtener otro token CSRF, vinculado a la identidad autenticada. El cliente de demostración implementa ese recorrido.
+
+La política de contraseña admite de 15 a 128 caracteres; el mínimo sigue la recomendación de [OWASP](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html). La cookie de sesión es `Secure`, `HttpOnly`, `SameSite=Strict` y dura treinta minutos sin renovación deslizante. Logout y cambio de contraseña revocan las sesiones del usuario. La cuenta se bloquea cinco minutos tras cinco fallos. Login y cambio de contraseña comparten un límite de diez solicitudes por minuto y dirección IP; verificar una contraseña actual incorrecta también cuenta para el bloqueo. Los intentos de una cuenta se serializan dentro de la instancia para proteger el contador de fallos.
+
+## Catálogo y organización
+
+La API ofrece `GET/POST /api/categories`, `GET /api/categories/{id}`, `GET/POST /api/gadgets` y `GET/PUT/DELETE /api/gadgets/{id}`. La consulta requiere lectura; las escrituras requieren edición. Los listados admiten `offset`, `limit` de 1 a 100 y, para productos, `categoryId`.
+
+Los precios son DOP con hasta dos decimales, entre 0 y 1 000 000, persistidos como centavos enteros. `PUT` y `DELETE` exigen la versión consultada para evitar sobrescribir una edición simultánea. Los conflictos devuelven 409; una identidad ausente, 401; un permiso insuficiente, 403. Los errores se expresan como `ProblemDetails`.
 
 | Proyecto | Responsabilidad |
 |---|---|
-| `src/Store.Domain` | Modelos y reglas sin dependencias de persistencia o HTTP. |
-| `src/Store.Application` | Casos de uso, contrato de repositorio y reloj inyectable. |
-| `src/Store.Infrastructure` | Dapper, conexiones SQLite y migración SQL embebida. |
-| `src/Store.Api` | Contratos HTTP, validación, controladores, errores y composición de dependencias. |
-| `tests/Store.UnitTests` | Reglas y servicios aislados con xUnit.net. |
-| `tests/Store.IntegrationTests` | API HTTP y SQLite real en archivos temporales. |
-
-La API ofrece `GET/POST /api/categories`, `GET /api/categories/{id}`, `GET/POST /api/gadgets` y `GET/PUT/DELETE /api/gadgets/{id}`. Los listados usan `offset` y `limit` (predeterminado 50; máximo 100). Productos admite el filtro `categoryId`.
-
-`PUT` exige el `version` obtenido al consultar el producto; `DELETE` lo recibe en `?version=...`. Una actualización exitosa incrementa la versión. Un dato inválido devuelve `400`, un recurso ausente `404` y una versión obsoleta o nombre de categoría duplicado `409`. Los errores se devuelven como `ProblemDetails`.
+| `Store.Domain` | Entidades y reglas del catálogo. |
+| `Store.Application` | Casos de uso y contratos de datos. |
+| `Store.Infrastructure` | Dapper, SQLite, scripts SQL y almacén de Identity. |
+| `Store.Api` | Contratos HTTP, autenticación, autorización y composición. |
+| `Store.UnitTests` | Reglas y servicios aislados. |
+| `Store.IntegrationTests` | HTTPS, identidad, permisos y SQLite real temporal. |
 
 ## Verificar cambios
-
-En macOS/Linux o Git Bash:
 
 ```sh
 bash scripts/verify.sh
 ```
 
-El script restaura con bloqueo, comprueba formato, compila con advertencias como errores, ejecuta ambas suites y consulta vulnerabilidades directas y transitivas. La consulta de vulnerabilidades informa sobre el estado disponible en NuGet; revisa su resultado.
-
-Equivalente en PowerShell o CMD, ejecutando cada comando solo si terminó correctamente el anterior:
+En PowerShell o CMD ejecuta los comandos individuales, continuando solo si el anterior termina correctamente:
 
 ```sh
 dotnet restore --locked-mode
@@ -99,15 +135,17 @@ dotnet test --solution Store.slnx --configuration Release --no-build
 dotnet list Store.slnx package --vulnerable --include-transitive
 ```
 
-## Alcance del ejemplo
+Las pruebas de integración usan sesiones reales y archivos SQLite temporales independientes. GitHub Actions ejecuta los controles en Ubuntu y Windows. El informe NuGet corresponde a las fuentes consultadas en ese momento.
 
-El comando de inicio escucha solo en loopback para desarrollo local. Antes de exponer una aplicación derivada, define autenticación y autorización según sus casos de uso, HTTPS, gestión de secretos, copias de respaldo y operación. La demo no implementa cuentas ni contraseñas y no depende de Entity Framework.
+## Operación y límites
 
-SQLite usa un único escritor a la vez. WAL facilita la convivencia entre lecturas y escrituras, con un timeout de cinco segundos ante bloqueos; las operaciones del repositorio son síncronas y no prometen cancelación inmediata. La unicidad `NOCASE` de nombres de categoría solo compara sin distinguir mayúsculas para caracteres ASCII. Consulta los límites y la evolución del esquema en las [decisiones técnicas](docs/decisiones.md).
+La configuración documentada usa HTTPS en localhost. La base, los secretos, las claves y los certificados privados quedan fuera del repositorio. Un despliegue requiere certificados válidos, claves persistentes protegidas, copias verificadas y configuración de red apropiada. Varias instancias necesitan coordinación distribuida de intentos y límites, además de claves compartidas; el bloqueo en memoria del ejemplo se limita a una instancia.
 
-## Regenerar la guía
+SQLite admite un escritor activo. WAL mejora la convivencia con lectores; las operaciones SQLite son síncronas y tienen un timeout finito ante bloqueos. `NOCASE` en nombres de categoría solo compara sin distinguir mayúsculas ASCII. El alcance no incluye interfaz gráfica, correo de recuperación, multifactor ni federación.
 
-El PDF se genera desde `docs/guia.md`. La edición actual contiene 16 páginas revisadas visualmente. Python solo es necesario para regenerar el documento, no para ejecutar la aplicación.
+## Generar la guía
+
+El PDF se genera desde `docs/guia.md` y los diagramas de `docs/assets`. Python solo es necesario para el cliente y las herramientas documentales.
 
 ```sh
 python3 -m venv work/docs-venv
@@ -115,6 +153,4 @@ work/docs-venv/bin/python -m pip install -r scripts/requirements-docs.txt
 work/docs-venv/bin/python scripts/build_guide.py
 ```
 
-En Windows usa `work\docs-venv\Scripts\python.exe`. Después de editar, renderiza el PDF y revisa todas las páginas; el corte intencional `<!-- pagebreak -->` mantiene la organización.
-
-La [evidencia de validación](docs/validacion.md) registra las versiones y resultados de esta edición.
+En Windows utiliza `work\docs-venv\Scripts\python.exe`. Los diagramas SVG y PNG se regeneran con `python scripts/build_diagrams.py`; el PDF incorpora los SVG como gráficos vectoriales. Renderiza el PDF y revisa todas sus páginas después de editarlo; `<!-- pagebreak -->` marca los cortes de diseño.

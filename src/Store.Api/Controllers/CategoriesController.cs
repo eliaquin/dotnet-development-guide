@@ -1,9 +1,13 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Store.Api.Security;
 using Store.Application;
 
 namespace Store.Api.Controllers;
 
 [ApiController]
+[Authorize(Policy = StorePolicies.ReadCatalog)]
+[RequestSizeLimit(16_384)]
 [Route("api/categories")]
 public sealed class CategoriesController(StoreService service) : ControllerBase
 {
@@ -15,6 +19,7 @@ public sealed class CategoriesController(StoreService service) : ControllerBase
     public ActionResult<CategoryResponse> Get(long id) => Ok(CategoryResponse.From(service.GetCategory(id)));
 
     [HttpPost]
+    [Authorize(Policy = StorePolicies.WriteCatalog)]
     public ActionResult<CategoryResponse> Create(CreateCategoryRequest request)
     {
         var category = service.CreateCategory(request.Name);

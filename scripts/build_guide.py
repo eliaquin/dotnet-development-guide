@@ -5,11 +5,14 @@ from __future__ import annotations
 import html
 from pathlib import Path
 import re
+import xml.etree.ElementTree as ET
 
+from reportlab.graphics.shapes import Drawing, Line, Polygon, Rect, String
 from reportlab.lib import colors
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.pdfbase import pdfmetrics
 from reportlab.platypus import (
-    BaseDocTemplate, Frame, PageBreak, PageTemplate,
+    BaseDocTemplate, Frame, Image, PageBreak, PageTemplate,
     Paragraph, Preformatted, Spacer, Table, TableStyle,
 )
 
@@ -48,6 +51,47 @@ def inline(value: str) -> str:
     return value
 
 
+def vector_diagram(path: Path) -> Drawing:
+    """Load the local primitive SVG format emitted by build_diagrams.py."""
+    root = ET.parse(path).getroot()
+    width, height = float(root.attrib['width']), float(root.attrib['height'])
+    drawing = Drawing(width, height)
+    for node in root:
+        kind = node.tag.rsplit('}', 1)[-1]
+        a = node.attrib
+        if kind == 'rect':
+            x, y, w, h = (float(a.get(k, 0)) for k in ('x', 'y', 'width', 'height'))
+            drawing.add(Rect(x, height-y-h, w, h, rx=float(a.get('rx', 0)),
+                             ry=float(a.get('rx', 0)), fillColor=colors.toColor(a.get('fill', 'white')),
+                             strokeColor=colors.toColor(a['stroke']) if 'stroke' in a else None,
+                             strokeWidth=float(a.get('stroke-width', 1))))
+        elif kind == 'line':
+            drawing.add(Line(float(a['x1']), height-float(a['y1']), float(a['x2']), height-float(a['y2']),
+                             strokeColor=colors.toColor(a['stroke']), strokeWidth=float(a['stroke-width']),
+                             strokeDashArray=[6, 6] if 'stroke-dasharray' in a else None))
+        elif kind == 'polygon':
+            points = []
+            for point in a['points'].split():
+                x, y = point.split(',')
+                points.extend((float(x), height-float(y)))
+            drawing.add(Polygon(points, fillColor=colors.toColor(a['fill']), strokeColor=None))
+        elif kind == 'text':
+            name = 'Helvetica-Bold' if a.get('font-weight') == 'bold' else 'Helvetica'
+            size = float(a['font-size'])
+            ascent, descent = pdfmetrics.getAscentDescent(name, size)
+            drawing.add(String(float(a['x']), height-float(a['y'])-(ascent+descent)/2,
+                               node.text or '', fontName=name, fontSize=size,
+                               fillColor=colors.toColor(a['fill']), textAnchor=a.get('text-anchor', 'middle')))
+        else:
+            raise ValueError(f'Unsupported diagram primitive: {kind}')
+    scale = min(CONTENT / width, 370 / height)
+    drawing.scale(scale, scale)
+    drawing.width *= scale
+    drawing.height *= scale
+    drawing.hAlign = 'CENTER'
+    return drawing
+
+
 def draw_page(canvas, doc):
     canvas.saveState()
     canvas.setStrokeColor(TEAL)
@@ -58,7 +102,7 @@ def draw_page(canvas, doc):
     canvas.drawString(MARGIN, HEIGHT - 29, 'GUÍA DE DESARROLLO / .NET 10 LTS')
     canvas.setFont('Helvetica', 8)
     canvas.setFillColor(GRAY)
-    canvas.drawRightString(WIDTH - MARGIN, HEIGHT - 29, 'EDICIÓN 2.0 / NOV 2026')
+    canvas.drawRightString(WIDTH - MARGIN, HEIGHT - 29, 'EDICIÓN 3.0 / NOV 2026')
     canvas.setStrokeColor(colors.HexColor('#d9e2e7'))
     canvas.setLineWidth(.5)
     canvas.line(MARGIN, 42, WIDTH - MARGIN, 42)
@@ -77,6 +121,22 @@ def parse_page(source: str, index: int):
     while i < len(lines):
         line = lines[i].strip()
         if not line:
+            i += 1
+            continue
+        picture = re.fullmatch(r'!\[([^\]]*)\]\(([^)]+)\)', line)
+        if picture:
+            picture_path = (ROOT / 'docs' / picture.group(2)).resolve()
+            if not picture_path.is_relative_to((ROOT / 'docs/assets').resolve()):
+                raise ValueError('Guide images must be inside docs/assets')
+            if picture_path.with_suffix('.svg').exists():
+                drawing = vector_diagram(picture_path.with_suffix('.svg'))
+            else:
+                drawing = Image(str(picture_path))
+                scale = min(CONTENT / drawing.imageWidth, 370 / drawing.imageHeight)
+                drawing.drawWidth = drawing.imageWidth * scale
+                drawing.drawHeight = drawing.imageHeight * scale
+                drawing.hAlign = 'CENTER'
+            flow.extend([drawing, Spacer(1, 12)])
             i += 1
             continue
         if line.startswith('```'):
@@ -144,9 +204,9 @@ def main():
     output = ROOT / 'docs/guia.pdf'
     doc = BaseDocTemplate(str(output), pagesize=(WIDTH, HEIGHT), leftMargin=MARGIN,
                           rightMargin=MARGIN, topMargin=65, bottomMargin=57,
-                          title='Guía de desarrollo con .NET 10',
+                          title='Desarrollo de aplicaciones con .NET 10',
                           author='Eliaquín Encarnación',
-                          subject='Arquitectura, Dapper, SQLite y pruebas automatizadas',
+                          subject='Arquitectura, Identity, autorización, Dapper y pruebas automatizadas',
                           pageCompression=1)
     frame = Frame(MARGIN, 57, CONTENT, HEIGHT - 122, leftPadding=0, rightPadding=0,
                   topPadding=0, bottomPadding=0)

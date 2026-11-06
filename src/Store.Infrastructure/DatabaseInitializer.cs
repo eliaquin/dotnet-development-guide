@@ -4,7 +4,7 @@ namespace Store.Infrastructure;
 
 public sealed class DatabaseInitializer(SqliteConnectionFactory connectionFactory)
 {
-    private const long CurrentVersion = 1;
+    private const long CurrentVersion = 2;
 
     public void Initialize()
     {
@@ -26,14 +26,25 @@ public sealed class DatabaseInitializer(SqliteConnectionFactory connectionFactor
 
         if (version < 1)
         {
-            using var stream = typeof(DatabaseInitializer).Assembly.GetManifestResourceStream(
-                "Store.Infrastructure.Migrations.001_initial.sql")
-                ?? throw new InvalidOperationException("No se encontró la migración inicial.");
-            using var reader = new StreamReader(stream);
-            connection.Execute(reader.ReadToEnd(), transaction: transaction);
+            connection.Execute(ReadMigration("001_initial.sql"), transaction: transaction);
             connection.Execute("PRAGMA user_version = 1;", transaction: transaction);
         }
 
+        if (version < 2)
+        {
+            connection.Execute(ReadMigration("002_identity.sql"), transaction: transaction);
+            connection.Execute("PRAGMA user_version = 2;", transaction: transaction);
+        }
+
         transaction.Commit();
+    }
+
+    private static string ReadMigration(string name)
+    {
+        using var stream = typeof(DatabaseInitializer).Assembly.GetManifestResourceStream(
+            $"Store.Infrastructure.Migrations.{name}")
+            ?? throw new InvalidOperationException($"No se encontró la migración {name}.");
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd();
     }
 }
