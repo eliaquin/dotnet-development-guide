@@ -1,5 +1,7 @@
 # Guía de desarrollo con .NET 10
 
+[![Build and test](https://github.com/eliaquin/dotnet-development-guide/actions/workflows/ci.yml/badge.svg)](https://github.com/eliaquin/dotnet-development-guide/actions/workflows/ci.yml)
+
 Un catálogo local de categorías y productos que muestra separación de responsabilidades, SQL parametrizado con Dapper, reglas de dominio y pruebas automatizadas. La presentación es una API HTTP con controladores; no incluye interfaz gráfica ni autenticación.
 
 Consulta la [guía de implementación en PDF](docs/guia.pdf) y las [decisiones técnicas](docs/decisiones.md).

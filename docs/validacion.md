@@ -45,7 +45,7 @@ Se detuvieron los procesos al finalizar. La base temporal no forma parte del rep
 
 ## Integración continua
 
-El [workflow de GitHub Actions](https://github.com/eliaquin/dotnet-development-guide/actions/workflows/ci.yml) ejecuta la misma secuencia en Ubuntu y Windows. El estado remoto de la edición se registra aquí tras su publicación.
+El [workflow de GitHub Actions](https://github.com/eliaquin/dotnet-development-guide/actions/workflows/ci.yml) ejecuta la misma secuencia en Ubuntu y Windows. La [ejecución de publicación 42217981900](https://github.com/eliaquin/dotnet-development-guide/actions/runs/42217981900), correspondiente al commit `e08da76bf19294256115ec33081be2516360b95d`, terminó correctamente en ambas plataformas: restauración, formato, compilación sin advertencias, 102 pruebas aprobadas y auditoría de dependencias. Los cambios posteriores de esta edición solo agregan esta evidencia a la documentación.
 
 ## Documento
 
